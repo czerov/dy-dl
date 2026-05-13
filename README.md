@@ -107,6 +107,8 @@ restart: "no"
 | GET | `/api/status` | 运行状态 |
 | GET | `/api/config` | 读取配置 |
 | PUT | `/api/config` | 保存配置 |
+| GET | `/api/cookies` | 查看 Cookie 文件状态 |
+| PUT | `/api/cookies` | 更新 Cookie 文件内容 |
 | POST | `/api/run` | 手动启动一次下载 |
 | GET | `/api/check` | 环境检查 |
 | GET | `/api/downloads` | 下载历史 |

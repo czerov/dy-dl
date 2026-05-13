@@ -4,6 +4,7 @@ const state = {
   checks: [],
   downloads: [],
   logs: "",
+  cookies: null,
   activeView: "dashboard",
 };
 
@@ -39,13 +40,14 @@ function bindActions() {
   document.getElementById("add-user-button").addEventListener("click", addUser);
   document.getElementById("save-users-button").addEventListener("click", saveConfig);
   document.getElementById("save-settings-button").addEventListener("click", saveConfig);
+  document.getElementById("save-cookie-button").addEventListener("click", saveCookies);
   document.getElementById("refresh-history-button").addEventListener("click", loadDownloads);
   document.getElementById("refresh-logs-button").addEventListener("click", loadLogs);
 }
 
 async function refreshAll() {
   try {
-    await Promise.all([loadConfig(), loadStatus(), loadDownloads(), loadLogs()]);
+    await Promise.all([loadConfig(), loadStatus(), loadDownloads(), loadLogs(), loadCookies()]);
     await loadChecks();
     render();
   } catch (error) {
@@ -89,12 +91,40 @@ async function loadLogs() {
   renderLogs();
 }
 
+async function loadCookies() {
+  state.cookies = await api("/api/cookies");
+  renderCookies();
+}
+
 async function runNow() {
   try {
     await api("/api/run", { method: "POST" });
     showToast("下载任务已启动");
     await loadStatus();
     renderStatus();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function saveCookies() {
+  const input = document.getElementById("cookie-input");
+  const content = input.value.trim();
+  if (!content) {
+    showToast("CK 内容为空");
+    return;
+  }
+
+  try {
+    state.cookies = await api("/api/cookies", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    input.value = "";
+    showToast("CK 已保存");
+    renderCookies();
+    await loadChecks();
   } catch (error) {
     showToast(error.message);
   }
@@ -135,6 +165,7 @@ function render() {
   renderChecks();
   renderUsers();
   renderSettings();
+  renderCookies();
   renderDownloads();
   renderLogs();
 }
@@ -244,6 +275,21 @@ function renderSettings() {
     ${field("通知类型", `<input data-notify-field="type" value="${escapeAttr(notify.type)}" />`)}
     ${field("Webhook URL", `<input data-notify-field="webhook_url" value="${escapeAttr(notify.webhook_url)}" />`, true)}
   `;
+}
+
+function renderCookies() {
+  const status = document.getElementById("cookie-status");
+  if (!status) return;
+  const cookies = state.cookies;
+  if (!cookies) {
+    status.textContent = "未加载";
+    return;
+  }
+
+  const stateText = cookies.exists ? "已配置" : "未配置";
+  const sizeText = cookies.exists ? ` · ${formatBytes(cookies.size)}` : "";
+  const timeText = cookies.updated_at ? ` · ${formatTime(cookies.updated_at)}` : "";
+  status.textContent = `${stateText} · ${cookies.path || "-"}${sizeText}${timeText}`;
 }
 
 function renderDownloads() {
@@ -360,6 +406,13 @@ function formatTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+function formatBytes(value) {
+  const size = Number(value) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function showToast(message) {

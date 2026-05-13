@@ -50,6 +50,17 @@ type updateConfigRequest struct {
 	Config config.Config `json:"config"`
 }
 
+type cookieStatusResponse struct {
+	Path      string `json:"path"`
+	Exists    bool   `json:"exists"`
+	Size      int64  `json:"size"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+type updateCookiesRequest struct {
+	Content string `json:"content"`
+}
+
 type statusResponse struct {
 	Version        string `json:"version"`
 	ConfigPath     string `json:"config_path"`
@@ -108,6 +119,7 @@ func (s *Server) routes() (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/cookies", s.handleCookies)
 	mux.HandleFunc("/api/run", s.handleRun)
 	mux.HandleFunc("/api/check", s.handleCheck)
 	mux.HandleFunc("/api/downloads", s.handleDownloads)
@@ -178,6 +190,34 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			ConfigPath:   s.configPath,
 			CookiesExist: fileExists(normalized.App.CookiesFile),
 		})
+	default:
+		writeMethodNotAllowed(w)
+	}
+}
+
+func (s *Server) handleCookies(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cfg, _, _, _, _ := s.snapshot()
+		writeJSON(w, http.StatusOK, cookieStatus(cfg.App.CookiesFile))
+	case http.MethodPut:
+		var req updateCookiesRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		content := strings.TrimSpace(req.Content)
+		if content == "" {
+			writeError(w, http.StatusBadRequest, errors.New("cookie content is required"))
+			return
+		}
+
+		cfg, _, _, _, _ := s.snapshot()
+		if err := writeCookieFile(cfg.App.CookiesFile, content); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, cookieStatus(cfg.App.CookiesFile))
 	default:
 		writeMethodNotAllowed(w)
 	}
@@ -291,6 +331,34 @@ func fileExists(path string) bool {
 	}
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+func cookieStatus(path string) cookieStatusResponse {
+	resp := cookieStatusResponse{Path: path}
+	if path == "" {
+		return resp
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return resp
+	}
+	resp.Exists = true
+	resp.Size = info.Size()
+	resp.UpdatedAt = info.ModTime().Format(time.RFC3339)
+	return resp
+}
+
+func writeCookieFile(path, content string) error {
+	if path == "" {
+		return errors.New("cookies file path is empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	return os.WriteFile(path, []byte(content), 0o600)
 }
 
 func tailFile(path string, lines int) (string, error) {

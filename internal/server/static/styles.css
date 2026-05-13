@@ -260,6 +260,13 @@ h2 {
   margin-bottom: 16px;
 }
 
+.panel-meta {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .check-list,
 .user-list,
 .settings-grid {
@@ -318,14 +325,28 @@ h2 {
 }
 
 .field input,
-.field select {
+.field select,
+.cookie-input {
   width: 100%;
-  min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 0 10px;
   color: var(--ink);
   background: #ffffff;
+}
+
+.field input,
+.field select {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.cookie-input {
+  min-height: 180px;
+  resize: vertical;
+  padding: 12px;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .field input[type="checkbox"] {
