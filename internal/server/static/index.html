@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>douyin-nas-monitor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">D</div>
+          <div>
+            <strong>dy-dl</strong>
+            <span>NAS Monitor</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-button active" data-view-button="dashboard">总览</button>
+          <button class="nav-button" data-view-button="users">用户</button>
+          <button class="nav-button" data-view-button="settings">配置</button>
+          <button class="nav-button" data-view-button="history">历史</button>
+          <button class="nav-button" data-view-button="logs">日志</button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">douyin-nas-monitor</p>
+            <h1 id="view-title">总览</h1>
+          </div>
+          <div class="topbar-actions">
+            <span id="run-state" class="status-pill">未连接</span>
+            <button class="ghost-button" id="refresh-button" type="button" title="刷新">刷新</button>
+            <button class="primary-button" id="run-button" type="button">立即运行</button>
+          </div>
+        </header>
+
+        <section class="view active" id="view-dashboard">
+          <div class="metric-grid">
+            <article class="metric-panel">
+              <span>运行状态</span>
+              <strong id="metric-running">-</strong>
+            </article>
+            <article class="metric-panel">
+              <span>启用用户</span>
+              <strong id="metric-users">-</strong>
+            </article>
+            <article class="metric-panel">
+              <span>运行模式</span>
+              <strong id="metric-mode">-</strong>
+            </article>
+            <article class="metric-panel">
+              <span>最近完成</span>
+              <strong id="metric-finished">-</strong>
+            </article>
+          </div>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>环境检查</h2>
+              <button class="ghost-button" id="check-button" type="button">检查</button>
+            </div>
+            <div class="check-list" id="check-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-users">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>监控用户</h2>
+              <div class="button-row">
+                <button class="ghost-button" id="add-user-button" type="button">添加用户</button>
+                <button class="primary-button" id="save-users-button" type="button">保存配置</button>
+              </div>
+            </div>
+            <div class="user-list" id="user-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-settings">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>基础配置</h2>
+              <button class="primary-button" id="save-settings-button" type="button">保存配置</button>
+            </div>
+            <div class="settings-grid" id="settings-form"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-history">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>下载历史</h2>
+              <button class="ghost-button" id="refresh-history-button" type="button">刷新</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>用户</th>
+                    <th>视频</th>
+                    <th>清晰度</th>
+                    <th>状态</th>
+                    <th>更新时间</th>
+                  </tr>
+                </thead>
+                <tbody id="download-rows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-logs">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>运行日志</h2>
+              <button class="ghost-button" id="refresh-logs-button" type="button">刷新</button>
+            </div>
+            <pre class="log-box" id="log-box"></pre>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>

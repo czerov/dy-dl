@@ -11,9 +11,9 @@ import (
 )
 
 type CheckResult struct {
-	Name    string
-	OK      bool
-	Message string
+	Name    string `json:"name"`
+	OK      bool   `json:"ok"`
+	Message string `json:"message"`
 }
 
 func CheckEnvironment(ctx context.Context, cfg config.Config) []CheckResult {

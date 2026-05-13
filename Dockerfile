@@ -19,4 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY --from=builder /out/douyin-nas-monitor /usr/local/bin/douyin-nas-monitor
 
-CMD ["douyin-nas-monitor", "--config", "/app/config.yaml", "--once"]
+EXPOSE 3456
+
+CMD ["douyin-nas-monitor", "--config", "/app/config.yaml", "--web", "--addr", ":3456"]

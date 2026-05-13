@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,43 +18,43 @@ const (
 )
 
 type Config struct {
-	App      AppConfig      `yaml:"app"`
-	Download DownloadConfig `yaml:"download"`
-	Users    []UserConfig   `yaml:"users"`
-	Notify   NotifyConfig   `yaml:"notify"`
+	App      AppConfig      `yaml:"app" json:"app"`
+	Download DownloadConfig `yaml:"download" json:"download"`
+	Users    []UserConfig   `yaml:"users" json:"users"`
+	Notify   NotifyConfig   `yaml:"notify" json:"notify"`
 }
 
 type AppConfig struct {
-	Mode                     string `yaml:"mode"`
-	IntervalMinutes          int    `yaml:"interval_minutes"`
-	SleepBetweenUsersSeconds int    `yaml:"sleep_between_users_seconds"`
-	LogFile                  string `yaml:"log_file"`
-	Database                 string `yaml:"database"`
-	CookiesFile              string `yaml:"cookies_file"`
-	ArchiveFile              string `yaml:"archive_file"`
-	DefaultSaveDir           string `yaml:"default_save_dir"`
-	YTDLPPath                string `yaml:"yt_dlp_path"`
-	TimeoutSeconds           int    `yaml:"timeout_seconds"`
+	Mode                     string `yaml:"mode" json:"mode"`
+	IntervalMinutes          int    `yaml:"interval_minutes" json:"interval_minutes"`
+	SleepBetweenUsersSeconds int    `yaml:"sleep_between_users_seconds" json:"sleep_between_users_seconds"`
+	LogFile                  string `yaml:"log_file" json:"log_file"`
+	Database                 string `yaml:"database" json:"database"`
+	CookiesFile              string `yaml:"cookies_file" json:"cookies_file"`
+	ArchiveFile              string `yaml:"archive_file" json:"archive_file"`
+	DefaultSaveDir           string `yaml:"default_save_dir" json:"default_save_dir"`
+	YTDLPPath                string `yaml:"yt_dlp_path" json:"yt_dlp_path"`
+	TimeoutSeconds           int    `yaml:"timeout_seconds" json:"timeout_seconds"`
 }
 
 type DownloadConfig struct {
-	MergeOutputFormat string `yaml:"merge_output_format"`
-	OutputTemplate    string `yaml:"output_template"`
-	Retries           int    `yaml:"retries"`
+	MergeOutputFormat string `yaml:"merge_output_format" json:"merge_output_format"`
+	OutputTemplate    string `yaml:"output_template" json:"output_template"`
+	Retries           int    `yaml:"retries" json:"retries"`
 }
 
 type UserConfig struct {
-	Name    string  `yaml:"name"`
-	URL     string  `yaml:"url"`
-	Enabled bool    `yaml:"enabled"`
-	Quality Quality `yaml:"quality"`
-	SaveDir string  `yaml:"save_dir"`
+	Name    string  `yaml:"name" json:"name"`
+	URL     string  `yaml:"url" json:"url"`
+	Enabled bool    `yaml:"enabled" json:"enabled"`
+	Quality Quality `yaml:"quality" json:"quality"`
+	SaveDir string  `yaml:"save_dir" json:"save_dir"`
 }
 
 type NotifyConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	Type       string `yaml:"type"`
-	WebhookURL string `yaml:"webhook_url"`
+	Enabled    bool   `yaml:"enabled" json:"enabled"`
+	Type       string `yaml:"type" json:"type"`
+	WebhookURL string `yaml:"webhook_url" json:"webhook_url"`
 }
 
 type Quality string
@@ -66,6 +67,22 @@ func (q *Quality) UnmarshalYAML(value *yaml.Node) error {
 	default:
 		return fmt.Errorf("quality must be a scalar")
 	}
+}
+
+func (q *Quality) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*q = Quality(strings.TrimSpace(str))
+		return nil
+	}
+
+	var number json.Number
+	if err := json.Unmarshal(data, &number); err == nil {
+		*q = Quality(strings.TrimSpace(number.String()))
+		return nil
+	}
+
+	return fmt.Errorf("quality must be a string or number")
 }
 
 func (q Quality) String() string {
@@ -90,6 +107,17 @@ func Load(path string) (Config, error) {
 		cfg = cfg.WithRelativePaths(filepath.Dir(abs))
 	}
 	return cfg, nil
+}
+
+func Save(path string, cfg Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 func Defaults() Config {

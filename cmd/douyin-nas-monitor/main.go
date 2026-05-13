@@ -13,6 +13,7 @@ import (
 	"douyin-nas-monitor/internal/logger"
 	"douyin-nas-monitor/internal/monitor"
 	"douyin-nas-monitor/internal/notify"
+	"douyin-nas-monitor/internal/server"
 	"douyin-nas-monitor/internal/storage"
 )
 
@@ -24,6 +25,8 @@ func main() {
 		onceFlag    bool
 		daemonFlag  bool
 		checkFlag   bool
+		webFlag     bool
+		addr        string
 		versionFlag bool
 	)
 
@@ -31,6 +34,8 @@ func main() {
 	flag.BoolVar(&onceFlag, "once", false, "run once and exit")
 	flag.BoolVar(&daemonFlag, "daemon", false, "run forever using app.interval_minutes")
 	flag.BoolVar(&checkFlag, "check", false, "check configuration and runtime dependencies")
+	flag.BoolVar(&webFlag, "web", false, "run web management server")
+	flag.StringVar(&addr, "addr", ":3456", "web server listen address")
 	flag.BoolVar(&versionFlag, "version", false, "print version")
 	flag.Parse()
 
@@ -85,6 +90,15 @@ func main() {
 		os.Exit(1)
 	}
 	defer store.Close()
+
+	if webFlag {
+		srv := server.New(configPath, cfg, log, store, version)
+		if err := srv.ListenAndServe(ctx, addr); err != nil {
+			log.Errorf("web server failed: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	runner := monitor.NewRunner(cfg, log, store, downloader.New(), notify.NewGeneric(cfg.Notify))
 	if cfg.App.Mode == config.ModeDaemon {

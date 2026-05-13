@@ -19,14 +19,28 @@ type Store struct {
 }
 
 type DownloadRecord struct {
-	UserName string
-	UserURL  string
-	VideoID  string
-	Title    string
-	FilePath string
-	Quality  string
-	Status   string
-	Error    string
+	UserName string `json:"user_name"`
+	UserURL  string `json:"user_url"`
+	VideoID  string `json:"video_id"`
+	Title    string `json:"title"`
+	FilePath string `json:"file_path"`
+	Quality  string `json:"quality"`
+	Status   string `json:"status"`
+	Error    string `json:"error"`
+}
+
+type DownloadListItem struct {
+	ID        int64  `json:"id"`
+	UserName  string `json:"user_name"`
+	UserURL   string `json:"user_url"`
+	VideoID   string `json:"video_id"`
+	Title     string `json:"title"`
+	FilePath  string `json:"file_path"`
+	Quality   string `json:"quality"`
+	Status    string `json:"status"`
+	Error     string `json:"error"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 func Open(path string) (*Store, error) {
@@ -91,6 +105,44 @@ ON CONFLICT(video_id) DO UPDATE SET
     updated_at = CURRENT_TIMESTAMP
 `, record.UserName, record.UserURL, record.VideoID, record.Title, record.FilePath, record.Quality, record.Status, record.Error)
 	return err
+}
+
+func (s *Store) ListDownloads(ctx context.Context, limit int) ([]DownloadListItem, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, user_name, user_url, video_id, title, file_path, quality, status, error, created_at, updated_at
+FROM downloads
+ORDER BY updated_at DESC, id DESC
+LIMIT ?
+`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]DownloadListItem, 0)
+	for rows.Next() {
+		var item DownloadListItem
+		if err := rows.Scan(
+			&item.ID,
+			&item.UserName,
+			&item.UserURL,
+			&item.VideoID,
+			&item.Title,
+			&item.FilePath,
+			&item.Quality,
+			&item.Status,
+			&item.Error,
+			&item.CreatedAt,
+			&item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func FailureID(userURL string, at time.Time) string {

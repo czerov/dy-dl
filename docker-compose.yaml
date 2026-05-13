@@ -10,5 +10,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./downloads:/downloads
-    command: douyin-nas-monitor --config /app/config.yaml --once
-    restart: "no"
+    ports:
+      - "3456:3456"
+    command: douyin-nas-monitor --config /app/config.yaml --web --addr :3456
+    restart: unless-stopped

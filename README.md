@@ -20,6 +20,7 @@
 - 使用 `--download-archive` 跳过已下载视频。
 - 使用 SQLite 记录下载结果。
 - 支持 `--once`、`--daemon`、`--check`。
+- 内置 Web 管理台和 HTTP API。
 - 支持 Docker / Docker Compose 部署。
 
 ## 快速开始
@@ -56,6 +57,18 @@ go run ./cmd/douyin-nas-monitor --config config.yaml --once
 go run ./cmd/douyin-nas-monitor --config config.yaml --daemon
 ```
 
+启动 Web 管理台：
+
+```bash
+go run ./cmd/douyin-nas-monitor --config config.yaml --web --addr :3456
+```
+
+打开：
+
+```text
+http://localhost:3456
+```
+
 ## Docker Compose
 
 先准备：
@@ -76,12 +89,28 @@ cp config.yaml.example config.yaml
 docker compose run --rm douyin-monitor
 ```
 
-常驻运行时，把 compose 中的 command 和 restart 改成：
+默认 Compose 会启动 Web 管理台，并暴露 `3456` 端口。
+
+如果只想用 NAS 定时任务单次执行，把 compose 中的 command 和 restart 改成：
 
 ```yaml
-command: douyin-nas-monitor --config /app/config.yaml --daemon
-restart: unless-stopped
+command: douyin-nas-monitor --config /app/config.yaml --once
+restart: "no"
 ```
+
+## Web API
+
+当前内置接口：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/status` | 运行状态 |
+| GET | `/api/config` | 读取配置 |
+| PUT | `/api/config` | 保存配置 |
+| POST | `/api/run` | 手动启动一次下载 |
+| GET | `/api/check` | 环境检查 |
+| GET | `/api/downloads` | 下载历史 |
+| GET | `/api/logs` | 日志尾部 |
 
 ## NAS 定时任务
 
