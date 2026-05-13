@@ -1,0 +1,13 @@
+.git
+.gitignore
+build/
+data/
+logs/
+downloads/
+config.yaml
+cookies.txt
+*.db
+archive.txt
+douyin-nas-monitor
+douyin-nas-monitor.exe
+.env
