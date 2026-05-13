@@ -31,3 +31,16 @@ func TestWriteCookieFile(t *testing.T) {
 		t.Fatal("cookie status should report size")
 	}
 }
+
+func TestNormalizeRawCookieHeader(t *testing.T) {
+	got, err := normalizeCookieContent("Cookie: sessionid=secret; ttwid=abc; is_staff_user=false")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "# Netscape HTTP Cookie File\n") {
+		t.Fatalf("expected Netscape header, got %q", got)
+	}
+	if !strings.Contains(got, ".douyin.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\tsecret") {
+		t.Fatalf("expected converted sessionid cookie, got %q", got)
+	}
+}

@@ -124,7 +124,7 @@ async function saveCookies() {
     input.value = "";
     showToast("CK 已保存");
     renderCookies();
-    await loadChecks();
+    await Promise.all([loadChecks(), loadLogs()]);
   } catch (error) {
     showToast(error.message);
   }

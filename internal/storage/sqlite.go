@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"douyin-nas-monitor/internal/sensitive"
+
 	"os"
 
 	_ "modernc.org/sqlite"
@@ -91,6 +93,7 @@ func (s *Store) UpsertDownload(ctx context.Context, record DownloadRecord) error
 	if record.VideoID == "" {
 		return fmt.Errorf("video id is required")
 	}
+	record.Error = sensitive.Redact(record.Error)
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO downloads (user_name, user_url, video_id, title, file_path, quality, status, error, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -141,6 +144,9 @@ LIMIT ?
 			return nil, err
 		}
 		items = append(items, item)
+	}
+	for i := range items {
+		items[i].Error = sensitive.Redact(items[i].Error)
 	}
 	return items, rows.Err()
 }

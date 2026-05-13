@@ -12,6 +12,7 @@ import (
 	"douyin-nas-monitor/internal/downloader"
 	"douyin-nas-monitor/internal/logger"
 	"douyin-nas-monitor/internal/notify"
+	"douyin-nas-monitor/internal/sensitive"
 	"douyin-nas-monitor/internal/storage"
 )
 
@@ -136,11 +137,11 @@ func (r *Runner) processUser(ctx context.Context, user config.UserConfig) error 
 		if lastErr == nil {
 			break
 		}
-		r.log.Warnf("user=%s attempt=%d/%d failed: %v", user.Name, attempt, attempts, lastErr)
+		r.log.Warnf("user=%s attempt=%d/%d failed: %s", user.Name, attempt, attempts, sensitive.Redact(lastErr.Error()))
 	}
 
 	if lastErr != nil {
-		errText := lastErr.Error()
+		errText := sensitive.Redact(lastErr.Error())
 		r.log.Errorf("user=%s failed after %d attempts", user.Name, attempts)
 		record := storage.DownloadRecord{
 			UserName: user.Name,
@@ -160,7 +161,7 @@ func (r *Runner) processUser(ctx context.Context, user config.UserConfig) error 
 			Status:  "failed",
 			Error:   errText,
 		})
-		return fmt.Errorf("process user %s: %w", user.Name, lastErr)
+		return fmt.Errorf("process user %s: %s", user.Name, errText)
 	}
 
 	after, err := archive.ReadIDs(r.cfg.App.ArchiveFile)

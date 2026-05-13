@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"douyin-nas-monitor/internal/config"
+	"douyin-nas-monitor/internal/sensitive"
 )
 
 const downloadLinePrefix = "DYDL_DOWNLOAD\t"
@@ -55,7 +56,7 @@ func (d *Downloader) Run(ctx context.Context, job Job) (Result, error) {
 	cmd.Stderr = &stderr
 
 	err = cmd.Run()
-	output := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
+	output := sensitive.Redact(strings.TrimSpace(stdout.String() + "\n" + stderr.String()))
 	result := Result{
 		Items:  ParseDownloadedItems(stdout.String()),
 		Output: output,
