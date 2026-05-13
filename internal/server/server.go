@@ -285,6 +285,14 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		lines = 200
 	}
 	cfg, _, _, _, _ := s.snapshot()
+	if err := redactFile(cfg.App.LogFile); err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, map[string]string{"text": ""})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	text, err := tailFile(cfg.App.LogFile, lines)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -432,6 +440,22 @@ func ensureTrailingNewline(value string) string {
 		return value
 	}
 	return value + "\n"
+}
+
+func redactFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	redacted := sensitive.Redact(string(data))
+	if redacted == string(data) {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(redacted), info.Mode().Perm())
 }
 
 func tailFile(path string, lines int) (string, error) {

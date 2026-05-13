@@ -77,4 +77,11 @@ func TestHandleLogsRedactsSensitiveValues(t *testing.T) {
 	if !strings.Contains(resp["text"], "plain=value") {
 		t.Fatalf("log response should keep non-sensitive value: %q", resp["text"])
 	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "secret") {
+		t.Fatalf("log file leaked secret after read: %q", string(data))
+	}
 }
