@@ -87,6 +87,8 @@ docker compose run --rm douyin-monitor
 
 首次启动不需要提前准备 `config.yaml` 或 `cookies.txt`。容器会在 `./data/config.yaml` 自动创建默认配置，CK 可在 Web 管理台的“配置”页面填写，并保存到 `./data/cookies.txt`。
 
+添加用户时，`URL` 填抖音用户主页链接，例如 `https://www.douyin.com/user/MS4wLj...`，不要只填抖音号。也可以填单条视频链接 `https://www.douyin.com/video/数字ID` 用来测试 Cookie 和下载链路。
+
 如果只想用 NAS 定时任务单次执行，把 compose 中的 command 和 restart 改成：
 
 ```yaml

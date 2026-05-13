@@ -9,6 +9,7 @@ import (
 
 	"douyin-nas-monitor/internal/archive"
 	"douyin-nas-monitor/internal/config"
+	"douyin-nas-monitor/internal/discovery"
 	"douyin-nas-monitor/internal/downloader"
 	"douyin-nas-monitor/internal/logger"
 	"douyin-nas-monitor/internal/notify"
@@ -122,40 +123,13 @@ func (r *Runner) enabledUsers() []config.UserConfig {
 func (r *Runner) processUser(ctx context.Context, user config.UserConfig) error {
 	r.log.Infof("processing user=%s quality=%s url=%s", user.Name, user.Quality.String(), user.URL)
 
-	before, err := archive.ReadIDs(r.cfg.App.ArchiveFile)
+	videoURLs, err := discovery.NewResolver().ResolveVideoURLs(ctx, user.URL, r.cfg.App.CookiesFile)
 	if err != nil {
-		return fmt.Errorf("read archive before user %s: %w", user.Name, err)
-	}
-
-	var result downloader.Result
-	attempts := r.cfg.Download.Retries + 1
-	var lastErr error
-	for attempt := 1; attempt <= attempts; attempt++ {
-		attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(r.cfg.App.TimeoutSeconds)*time.Second)
-		result, lastErr = r.downloader.Run(attemptCtx, downloader.JobFromConfig(r.cfg, user))
-		cancel()
-		if lastErr == nil {
-			break
-		}
-		r.log.Warnf("user=%s attempt=%d/%d failed: %s", user.Name, attempt, attempts, sensitive.Redact(lastErr.Error()))
-	}
-
-	if lastErr != nil {
-		errText := sensitive.Redact(lastErr.Error())
-		r.log.Errorf("user=%s failed after %d attempts", user.Name, attempts)
-		record := storage.DownloadRecord{
-			UserName: user.Name,
-			UserURL:  user.URL,
-			VideoID:  storage.FailureID(user.URL, time.Now()),
-			Quality:  user.Quality.String(),
-			Status:   "failed",
-			Error:    errText,
-		}
-		if err := r.store.UpsertDownload(ctx, record); err != nil {
-			r.log.Warnf("record failed download failed: %v", err)
-		}
+		errText := sensitive.Redact(err.Error())
+		r.log.Errorf("user=%s resolve videos failed: %s", user.Name, errText)
+		r.recordFailedDownload(ctx, user, user.URL, errText)
 		r.sendNotify(ctx, notify.Event{
-			Title:   "抖音视频下载失败",
+			Title:   "抖音视频解析失败",
 			User:    user.Name,
 			Quality: user.Quality.String(),
 			Status:  "failed",
@@ -163,21 +137,49 @@ func (r *Runner) processUser(ctx context.Context, user config.UserConfig) error 
 		})
 		return fmt.Errorf("process user %s: %s", user.Name, errText)
 	}
+	r.log.Infof("user=%s resolved %d video url(s)", user.Name, len(videoURLs))
+
+	before, err := archive.ReadIDs(r.cfg.App.ArchiveFile)
+	if err != nil {
+		return fmt.Errorf("read archive before user %s: %w", user.Name, err)
+	}
+
+	attempts := r.cfg.Download.Retries + 1
+	var downloadedItems []downloader.DownloadedItem
+	var runErr error
+	for _, videoURL := range videoURLs {
+		result, err := r.downloadVideo(ctx, user, videoURL, attempts)
+		if err != nil {
+			errText := sensitive.Redact(err.Error())
+			r.log.Errorf("user=%s url=%s failed after %d attempts", user.Name, videoURL, attempts)
+			r.recordFailedDownload(ctx, user, videoURL, errText)
+			r.sendNotify(ctx, notify.Event{
+				Title:   "抖音视频下载失败",
+				User:    user.Name,
+				Quality: user.Quality.String(),
+				Status:  "failed",
+				Error:   errText,
+			})
+			runErr = errors.Join(runErr, fmt.Errorf("%s: %s", videoURL, errText))
+			continue
+		}
+		downloadedItems = append(downloadedItems, result.Items...)
+	}
 
 	after, err := archive.ReadIDs(r.cfg.App.ArchiveFile)
 	if err != nil {
 		return fmt.Errorf("read archive after user %s: %w", user.Name, err)
 	}
 	addedArchiveIDs := archive.Diff(before, after)
-	if len(result.Items) == 0 {
-		result.Items = archiveItems(addedArchiveIDs)
+	if len(downloadedItems) == 0 {
+		downloadedItems = archiveItems(addedArchiveIDs)
 	}
-	if len(result.Items) == 0 {
+	if len(downloadedItems) == 0 {
 		r.log.Infof("user=%s no new videos", user.Name)
-		return nil
+		return runErr
 	}
 
-	for _, item := range result.Items {
+	for _, item := range downloadedItems {
 		record := storage.DownloadRecord{
 			UserName: user.Name,
 			UserURL:  user.URL,
@@ -200,7 +202,41 @@ func (r *Runner) processUser(ctx context.Context, user config.UserConfig) error 
 			FilePath: item.FilePath,
 		})
 	}
+	if runErr != nil {
+		return fmt.Errorf("process user %s: %w", user.Name, runErr)
+	}
 	return nil
+}
+
+func (r *Runner) downloadVideo(ctx context.Context, user config.UserConfig, videoURL string, attempts int) (downloader.Result, error) {
+	var result downloader.Result
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(r.cfg.App.TimeoutSeconds)*time.Second)
+		job := downloader.JobFromConfig(r.cfg, user)
+		job.UserURL = videoURL
+		result, lastErr = r.downloader.Run(attemptCtx, job)
+		cancel()
+		if lastErr == nil {
+			break
+		}
+		r.log.Warnf("user=%s attempt=%d/%d failed: %s", user.Name, attempt, attempts, sensitive.Redact(lastErr.Error()))
+	}
+	return result, lastErr
+}
+
+func (r *Runner) recordFailedDownload(ctx context.Context, user config.UserConfig, targetURL, errText string) {
+	record := storage.DownloadRecord{
+		UserName: user.Name,
+		UserURL:  user.URL,
+		VideoID:  storage.FailureID(targetURL, time.Now()),
+		Quality:  user.Quality.String(),
+		Status:   "failed",
+		Error:    errText,
+	}
+	if err := r.store.UpsertDownload(ctx, record); err != nil {
+		r.log.Warnf("record failed download failed: %v", err)
+	}
 }
 
 func archiveItems(ids []string) []downloader.DownloadedItem {

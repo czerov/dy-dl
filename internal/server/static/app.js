@@ -230,7 +230,7 @@ function renderUsers() {
       return `
         <div class="user-row" data-user-index="${index}">
           ${field(`名称`, `<input data-user-field="name" value="${escapeAttr(user.name)}" />`)}
-          ${field(`主页 URL`, `<input data-user-field="url" value="${escapeAttr(user.url)}" />`)}
+          ${field(`主页 URL`, `<input data-user-field="url" value="${escapeAttr(user.url)}" placeholder="抖音用户主页或单条视频链接，抖音号不是链接" />`)}
           ${field(`清晰度`, qualitySelect(quality))}
           ${field(`保存目录`, `<input data-user-field="save_dir" value="${escapeAttr(user.save_dir || "")}" placeholder="留空用默认目录" />`)}
           ${field(`启用`, `<input data-user-field="enabled" type="checkbox" ${user.enabled ? "checked" : ""} />`)}
