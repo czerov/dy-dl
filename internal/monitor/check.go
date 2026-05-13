@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"douyin-nas-monitor/internal/config"
 )
@@ -23,8 +24,8 @@ func CheckEnvironment(ctx context.Context, cfg config.Config) []CheckResult {
 		checkWritablePath("archive directory", cfg.App.ArchiveFile),
 		checkWritablePath("log directory", cfg.App.LogFile),
 		checkWritableDir("download directory", cfg.App.DefaultSaveDir),
-		checkCommand(ctx, "yt-dlp", cfg.App.YTDLPPath),
-		checkCommand(ctx, "ffmpeg", "ffmpeg"),
+		checkCommand(ctx, "yt-dlp", cfg.App.YTDLPPath, "--version"),
+		checkCommand(ctx, "ffmpeg", "ffmpeg", "-version"),
 	}
 
 	enabled := 0
@@ -85,7 +86,7 @@ func checkWritableDir(name, dir string) CheckResult {
 	return CheckResult{Name: name, OK: true}
 }
 
-func checkCommand(ctx context.Context, name, command string) CheckResult {
+func checkCommand(ctx context.Context, name, command string, args ...string) CheckResult {
 	if command == "" {
 		return CheckResult{Name: name, OK: false, Message: "command is empty"}
 	}
@@ -93,9 +94,9 @@ func checkCommand(ctx context.Context, name, command string) CheckResult {
 	if err != nil {
 		return CheckResult{Name: name, OK: false, Message: err.Error()}
 	}
-	cmd := exec.CommandContext(ctx, path, "--version")
+	cmd := exec.CommandContext(ctx, path, args...)
 	if err := cmd.Run(); err != nil {
-		return CheckResult{Name: name, OK: false, Message: fmt.Sprintf("%s exists but --version failed: %v", path, err)}
+		return CheckResult{Name: name, OK: false, Message: fmt.Sprintf("%s exists but %s failed: %v", path, strings.Join(args, " "), err)}
 	}
 	return CheckResult{Name: name, OK: true}
 }

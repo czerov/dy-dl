@@ -20,6 +20,7 @@ import (
 	"douyin-nas-monitor/internal/logger"
 	"douyin-nas-monitor/internal/monitor"
 	"douyin-nas-monitor/internal/notify"
+	"douyin-nas-monitor/internal/sensitive"
 	"douyin-nas-monitor/internal/storage"
 )
 
@@ -293,7 +294,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"text": text})
+	writeJSON(w, http.StatusOK, map[string]string{"text": sensitive.Redact(text)})
 }
 
 func (s *Server) runOnce(cfg config.Config) {

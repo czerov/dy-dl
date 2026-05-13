@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"strings"
 
@@ -139,7 +140,7 @@ func JobFromConfig(cfg config.Config, user config.UserConfig) Job {
 	}
 	return Job{
 		UserName:          user.Name,
-		UserURL:           user.URL,
+		UserURL:           NormalizeUserURL(user.URL),
 		Quality:           user.Quality.String(),
 		SaveDir:           saveDir,
 		CookiesFile:       cfg.App.CookiesFile,
@@ -148,6 +149,23 @@ func JobFromConfig(cfg config.Config, user config.UserConfig) Job {
 		MergeOutputFormat: cfg.Download.MergeOutputFormat,
 		OutputTemplate:    cfg.Download.OutputTemplate,
 	}
+}
+
+func NormalizeUserURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return value
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	isDouyinHost := host == "douyin.com" || strings.HasSuffix(host, ".douyin.com")
+	if isDouyinHost && strings.HasPrefix(parsed.Path, "/user/") {
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		return parsed.String()
+	}
+	return value
 }
 
 func tail(value string, max int) string {

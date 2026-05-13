@@ -30,3 +30,18 @@ func TestParseDownloadedItems(t *testing.T) {
 		t.Fatalf("unexpected item: %#v", items[0])
 	}
 }
+
+func TestNormalizeUserURLStripsDouyinTrackingParams(t *testing.T) {
+	input := " https://www.douyin.com/user/MS4wLjABAAAA123?from_tab_name=main&is_search=0#profile "
+	want := "https://www.douyin.com/user/MS4wLjABAAAA123"
+	if got := NormalizeUserURL(input); got != want {
+		t.Fatalf("NormalizeUserURL() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeUserURLKeepsNonDouyinURL(t *testing.T) {
+	input := "https://example.com/user/abc?keep=1"
+	if got := NormalizeUserURL(input); got != input {
+		t.Fatalf("NormalizeUserURL() = %q, want %q", got, input)
+	}
+}
