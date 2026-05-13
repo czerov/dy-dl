@@ -2,9 +2,9 @@ app:
   mode: once
   interval_minutes: 120
   sleep_between_users_seconds: 30
-  log_file: /app/logs/douyin-monitor.log
+  log_file: /app/data/logs/douyin-monitor.log
   database: /app/data/douyin-monitor.db
-  cookies_file: /app/cookies.txt
+  cookies_file: /app/data/cookies.txt
   archive_file: /app/data/archive.txt
   default_save_dir: /downloads
   yt_dlp_path: yt-dlp

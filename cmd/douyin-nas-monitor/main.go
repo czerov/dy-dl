@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"douyin-nas-monitor/internal/config"
@@ -44,7 +46,7 @@ func main() {
 		return
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := loadConfig(configPath, webFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config failed: %v\n", err)
 		os.Exit(1)
@@ -110,4 +112,23 @@ func main() {
 		log.Errorf("run failed: %v", err)
 		os.Exit(1)
 	}
+}
+
+func loadConfig(path string, allowBootstrap bool) (config.Config, error) {
+	cfg, err := config.Load(path)
+	if err == nil {
+		return cfg, nil
+	}
+	if !allowBootstrap || !os.IsNotExist(err) {
+		return config.Config{}, err
+	}
+
+	defaults := config.Defaults()
+	if abs, absErr := filepath.Abs(path); absErr == nil && strings.HasPrefix(filepath.ToSlash(abs), "/app/") {
+		defaults.App.DefaultSaveDir = "/downloads"
+	}
+	if err := config.Save(path, defaults); err != nil {
+		return config.Config{}, fmt.Errorf("create default config: %w", err)
+	}
+	return config.Load(path)
 }

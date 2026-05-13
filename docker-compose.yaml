@@ -1,16 +1,13 @@
 services:
   douyin-monitor:
-    build: .
+    image: czerov/dy-dl:latest
     container_name: douyin-monitor
     environment:
       - TZ=Asia/Shanghai
     volumes:
-      - ./config.yaml:/app/config.yaml
-      - ./cookies.txt:/app/cookies.txt
       - ./data:/app/data
-      - ./logs:/app/logs
       - ./downloads:/downloads
     ports:
       - "3456:3456"
-    command: douyin-nas-monitor --config /app/config.yaml --web --addr :3456
+    command: douyin-nas-monitor --config /app/data/config.yaml --web --addr :3456
     restart: unless-stopped

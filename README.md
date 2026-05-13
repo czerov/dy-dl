@@ -25,13 +25,13 @@
 
 ## 快速开始
 
-复制配置文件：
+本地直接运行时可以复制配置文件：
 
 ```bash
 cp config.yaml.example config.yaml
 ```
 
-把浏览器导出的 Cookie 保存为：
+如果不使用 Web 管理台，可以把浏览器导出的 Cookie 保存为：
 
 ```text
 cookies.txt
@@ -71,12 +71,6 @@ http://localhost:3456
 
 ## Docker Compose
 
-先准备：
-
-```bash
-cp config.yaml.example config.yaml
-```
-
 编辑 `docker-compose.yaml` 中的下载目录映射，把 `./downloads:/downloads` 改成你的 NAS 媒体目录，例如：
 
 ```yaml
@@ -91,10 +85,12 @@ docker compose run --rm douyin-monitor
 
 默认 Compose 会启动 Web 管理台，并暴露 `3456` 端口。
 
+首次启动不需要提前准备 `config.yaml` 或 `cookies.txt`。容器会在 `./data/config.yaml` 自动创建默认配置，CK 可在 Web 管理台的“配置”页面填写，并保存到 `./data/cookies.txt`。
+
 如果只想用 NAS 定时任务单次执行，把 compose 中的 command 和 restart 改成：
 
 ```yaml
-command: douyin-nas-monitor --config /app/config.yaml --once
+command: douyin-nas-monitor --config /app/data/config.yaml --once
 restart: "no"
 ```
 

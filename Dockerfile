@@ -21,4 +21,4 @@ COPY --from=builder /out/douyin-nas-monitor /usr/local/bin/douyin-nas-monitor
 
 EXPOSE 3456
 
-CMD ["douyin-nas-monitor", "--config", "/app/config.yaml", "--web", "--addr", ":3456"]
+CMD ["douyin-nas-monitor", "--config", "/app/data/config.yaml", "--web", "--addr", ":3456"]

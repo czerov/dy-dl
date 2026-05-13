@@ -190,9 +190,6 @@ func (cfg Config) Validate() error {
 	if cfg.Download.Retries < 0 {
 		errs = append(errs, errors.New("download.retries cannot be negative"))
 	}
-	if len(cfg.Users) == 0 {
-		errs = append(errs, errors.New("users must contain at least one user"))
-	}
 	for i, user := range cfg.Users {
 		prefix := "users[" + strconv.Itoa(i) + "]"
 		if strings.TrimSpace(user.Name) == "" {
