@@ -1,0 +1,14 @@
+services:
+  douyin-monitor:
+    build: .
+    container_name: douyin-monitor
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./cookies.txt:/app/cookies.txt
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./downloads:/downloads
+    command: douyin-nas-monitor --config /app/config.yaml --once
+    restart: "no"

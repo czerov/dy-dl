@@ -1,0 +1,11 @@
+config.yaml
+cookies.txt
+data/
+logs/
+downloads/
+build/
+*.db
+archive.txt
+/douyin-nas-monitor
+/douyin-nas-monitor.exe
+.env
