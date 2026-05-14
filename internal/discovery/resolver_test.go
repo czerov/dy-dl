@@ -33,6 +33,23 @@ func TestExtractVideoIDs(t *testing.T) {
 	}
 }
 
+func TestExtractMediaItems(t *testing.T) {
+	page := `
+		<a href="/video/7123456789012345678">作品</a>
+		<a href="/collection/7234567890123456789">合集</a>
+		{"series_id":"7345678901234567890"}
+	`
+	got := ExtractMediaItems(page)
+	want := []MediaItem{
+		{ID: "7123456789012345678", Type: TypeWork, URL: "https://www.douyin.com/video/7123456789012345678"},
+		{ID: "7234567890123456789", Type: TypeCollection, URL: "https://www.douyin.com/collection/7234567890123456789"},
+		{ID: "7345678901234567890", Type: TypeSeries, URL: "https://www.douyin.com/series/7345678901234567890"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ExtractMediaItems() = %#v, want %#v", got, want)
+	}
+}
+
 func TestCookieHeaderFromFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cookies.txt")
 	content := "# Netscape HTTP Cookie File\n.douyin.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\tabc\n.douyin.com\tTRUE\t/\tTRUE\t2147483647\tttwid\tdef\n"

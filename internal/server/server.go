@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"douyin-nas-monitor/internal/config"
+	"douyin-nas-monitor/internal/discovery"
 	"douyin-nas-monitor/internal/downloader"
 	"douyin-nas-monitor/internal/logger"
 	"douyin-nas-monitor/internal/monitor"
@@ -60,6 +61,17 @@ type cookieStatusResponse struct {
 
 type updateCookiesRequest struct {
 	Content string `json:"content"`
+}
+
+type discoverRequest struct {
+	URL string `json:"url"`
+}
+
+type discoverDownloadRequest struct {
+	UserName string   `json:"user_name"`
+	Quality  string   `json:"quality"`
+	SaveDir  string   `json:"save_dir"`
+	URLs     []string `json:"urls"`
 }
 
 type statusResponse struct {
@@ -124,6 +136,8 @@ func (s *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("/api/run", s.handleRun)
 	mux.HandleFunc("/api/check", s.handleCheck)
 	mux.HandleFunc("/api/downloads", s.handleDownloads)
+	mux.HandleFunc("/api/discover", s.handleDiscover)
+	mux.HandleFunc("/api/discover/download", s.handleDiscoverDownload)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.Handle("/", spaHandler(staticFS))
 	return mux, nil
@@ -273,6 +287,95 @@ func (s *Server) handleDownloads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+	var req discoverRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	sourceURL := strings.TrimSpace(req.URL)
+	if sourceURL == "" {
+		writeError(w, http.StatusBadRequest, errors.New("URL is required"))
+		return
+	}
+
+	cfg, _, _, _, _ := s.snapshot()
+	result, err := discovery.NewResolver().Discover(r.Context(), sourceURL, cfg.App.CookiesFile)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleDiscoverDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+	var req discoverDownloadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	quality := strings.TrimSpace(req.Quality)
+	if quality == "" {
+		quality = "1080"
+	}
+	if !config.IsValidQuality(quality) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("quality must be one of best, 1080, 720, 480"))
+		return
+	}
+	userName := strings.TrimSpace(req.UserName)
+	if userName == "" {
+		userName = "selected"
+	}
+
+	users := make([]config.UserConfig, 0, len(req.URLs))
+	for _, rawURL := range req.URLs {
+		sourceURL := strings.TrimSpace(rawURL)
+		if sourceURL == "" {
+			continue
+		}
+		users = append(users, config.UserConfig{
+			Name:    userName,
+			URL:     sourceURL,
+			Enabled: true,
+			Quality: config.Quality(quality),
+			SaveDir: strings.TrimSpace(req.SaveDir),
+		})
+	}
+	if len(users) == 0 {
+		writeError(w, http.StatusBadRequest, errors.New("at least one URL is required"))
+		return
+	}
+
+	s.mu.Lock()
+	if s.running {
+		s.mu.Unlock()
+		writeError(w, http.StatusConflict, errors.New("download task is already running"))
+		return
+	}
+	cfg := s.cfg
+	cfg.Users = users
+	s.running = true
+	s.lastStartedAt = time.Now()
+	s.lastFinishedAt = time.Time{}
+	s.lastRunError = ""
+	s.mu.Unlock()
+
+	go s.runOnce(cfg)
+
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status": "started",
+	})
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {

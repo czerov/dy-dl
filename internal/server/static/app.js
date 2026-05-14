@@ -5,18 +5,31 @@ const state = {
   downloads: [],
   logs: "",
   cookies: null,
+  discovery: {
+    result: null,
+    selected: new Set(),
+    filter: "all",
+    sourceName: "",
+  },
   activeView: "dashboard",
 };
 
 const viewTitles = {
   dashboard: "总览",
   users: "用户",
+  discover: "发现",
   settings: "配置",
   history: "历史",
   logs: "日志",
 };
 
 const qualityOptions = ["best", "1080", "720", "480"];
+const discoverTypeLabels = {
+  all: "全部",
+  work: "作品",
+  collection: "合集",
+  series: "短剧",
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   bindNavigation();
@@ -41,6 +54,9 @@ function bindActions() {
   document.getElementById("save-users-button").addEventListener("click", saveConfig);
   document.getElementById("save-settings-button").addEventListener("click", saveConfig);
   document.getElementById("save-cookie-button").addEventListener("click", saveCookies);
+  document.getElementById("discover-button").addEventListener("click", discoverContent);
+  document.getElementById("download-selected-button").addEventListener("click", downloadSelectedDiscovery);
+  document.getElementById("discover-user-select").addEventListener("change", applyDiscoverUser);
   document.getElementById("refresh-history-button").addEventListener("click", loadDownloads);
   document.getElementById("refresh-logs-button").addEventListener("click", loadLogs);
 }
@@ -164,6 +180,7 @@ function render() {
   renderStatus();
   renderChecks();
   renderUsers();
+  renderDiscovery();
   renderSettings();
   renderCookies();
   renderDownloads();
@@ -246,6 +263,207 @@ function renderUsers() {
       renderUsers();
     });
   });
+}
+
+async function discoverContent() {
+  const input = document.getElementById("discover-url-input");
+  const sourceURL = input.value.trim();
+  if (!sourceURL) {
+    showToast("URL 为空");
+    return;
+  }
+
+  try {
+    showToast("正在获取列表");
+    const result = await api("/api/discover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: sourceURL }),
+    });
+    state.discovery.result = result;
+    state.discovery.selected = new Set();
+    state.discovery.filter = "all";
+    state.discovery.sourceName = currentDiscoverUserName() || "selected";
+    renderDiscovery();
+    showToast(`已获取 ${result.items.length} 个内容`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function downloadSelectedDiscovery() {
+  const result = state.discovery.result;
+  if (!result || !result.items || !result.items.length) {
+    showToast("没有可下载内容");
+    return;
+  }
+
+  const urls = [...state.discovery.selected]
+    .map((index) => result.items[Number(index)])
+    .filter(Boolean)
+    .map((item) => item.url);
+  if (!urls.length) {
+    showToast("先勾选要下载的内容");
+    return;
+  }
+
+  try {
+    await api("/api/discover/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_name: state.discovery.sourceName || currentDiscoverUserName() || "selected",
+        quality: document.getElementById("discover-quality-select").value,
+        save_dir: document.getElementById("discover-save-dir-input").value.trim(),
+        urls,
+      }),
+    });
+    showToast("选中内容已开始下载");
+    await loadStatus();
+    renderStatus();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function renderDiscovery() {
+  renderDiscoveryForm();
+  renderDiscoveryFilters();
+  renderDiscoveryItems();
+}
+
+function renderDiscoveryForm() {
+  const sourceSelect = document.getElementById("discover-user-select");
+  const qualitySelectElement = document.getElementById("discover-quality-select");
+  if (!sourceSelect || !qualitySelectElement) return;
+
+  const previousSource = sourceSelect.value;
+  const users = (state.config && state.config.users) || [];
+  sourceSelect.innerHTML = [
+    `<option value="">自定义</option>`,
+    ...users.map((user, index) => {
+      const label = user.name || user.url || `用户 ${index + 1}`;
+      return `<option value="${index}">${escapeHTML(label)}</option>`;
+    }),
+  ].join("");
+  if ([...sourceSelect.options].some((option) => option.value === previousSource)) {
+    sourceSelect.value = previousSource;
+  }
+
+  const previousQuality = qualitySelectElement.value || "1080";
+  qualitySelectElement.innerHTML = qualityOptions
+    .map((option) => `<option value="${option}">${option}</option>`)
+    .join("");
+  qualitySelectElement.value = qualityOptions.includes(previousQuality) ? previousQuality : "1080";
+}
+
+function renderDiscoveryFilters() {
+  const filter = document.getElementById("discover-type-filter");
+  if (!filter) return;
+  const items = (state.discovery.result && state.discovery.result.items) || [];
+  const counts = items.reduce(
+    (acc, item) => {
+      acc.all += 1;
+      acc[item.type] = (acc[item.type] || 0) + 1;
+      return acc;
+    },
+    { all: 0 },
+  );
+
+  const buttons = ["all", "work", "collection", "series"]
+    .map((type) => {
+      const active = state.discovery.filter === type ? "active" : "";
+      return `<button class="filter-button ${active}" type="button" data-discover-filter="${type}">${discoverTypeLabels[type]} ${counts[type] || 0}</button>`;
+    })
+    .join("");
+  filter.innerHTML = `${buttons}<span class="filter-spacer"></span><button class="ghost-button" type="button" id="discover-select-all">全选</button><button class="ghost-button" type="button" id="discover-clear-selection">清空</button>`;
+
+  filter.querySelectorAll("[data-discover-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.discovery.filter = button.dataset.discoverFilter;
+      renderDiscoveryFilters();
+      renderDiscoveryItems();
+    });
+  });
+  document.getElementById("discover-select-all").addEventListener("click", () => {
+    filteredDiscoveryEntries().forEach(({ index }) => state.discovery.selected.add(String(index)));
+    renderDiscoveryItems();
+  });
+  document.getElementById("discover-clear-selection").addEventListener("click", () => {
+    state.discovery.selected.clear();
+    renderDiscoveryItems();
+  });
+}
+
+function renderDiscoveryItems() {
+  const list = document.getElementById("discover-list");
+  if (!list) return;
+  const result = state.discovery.result;
+  if (!result) {
+    list.innerHTML = '<div class="empty">暂无内容</div>';
+    return;
+  }
+
+  const entries = filteredDiscoveryEntries();
+  if (!entries.length) {
+    list.innerHTML = '<div class="empty">当前类型暂无内容</div>';
+    return;
+  }
+
+  list.innerHTML = entries
+    .map(({ item, index }) => {
+      const selected = state.discovery.selected.has(String(index)) ? "checked" : "";
+      const title = item.title || `${discoverTypeLabels[item.type] || item.type} ${item.id}`;
+      return `
+        <label class="discover-row">
+          <input type="checkbox" data-discover-select="${index}" ${selected} />
+          <span class="discover-kind">${discoverTypeLabels[item.type] || item.type}</span>
+          <span>
+            <strong>${escapeHTML(title)}</strong>
+            <span class="muted">${escapeHTML(item.url)}</span>
+          </span>
+        </label>
+      `;
+    })
+    .join("");
+
+  list.querySelectorAll("[data-discover-select]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const index = input.dataset.discoverSelect;
+      if (input.checked) {
+        state.discovery.selected.add(index);
+      } else {
+        state.discovery.selected.delete(index);
+      }
+    });
+  });
+}
+
+function filteredDiscoveryEntries() {
+  const items = (state.discovery.result && state.discovery.result.items) || [];
+  return items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => state.discovery.filter === "all" || item.type === state.discovery.filter);
+}
+
+function applyDiscoverUser() {
+  const user = selectedDiscoverUser();
+  if (!user) return;
+  document.getElementById("discover-url-input").value = user.url || "";
+  document.getElementById("discover-quality-select").value = user.quality || "1080";
+  document.getElementById("discover-save-dir-input").value = user.save_dir || "";
+  state.discovery.sourceName = user.name || "selected";
+}
+
+function selectedDiscoverUser() {
+  const select = document.getElementById("discover-user-select");
+  if (!select || select.value === "" || !state.config || !state.config.users) return null;
+  return state.config.users[Number(select.value)] || null;
+}
+
+function currentDiscoverUserName() {
+  const user = selectedDiscoverUser();
+  return user && user.name ? user.name : "";
 }
 
 function renderSettings() {

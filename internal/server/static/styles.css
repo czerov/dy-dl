@@ -269,7 +269,8 @@ h2 {
 
 .check-list,
 .user-list,
-.settings-grid {
+.settings-grid,
+.discover-list {
   display: grid;
   gap: 12px;
 }
@@ -362,6 +363,75 @@ h2 {
 
 .settings-grid .wide {
   grid-column: span 3;
+}
+
+.discover-form .wide {
+  grid-column: span 1;
+}
+
+.discover-form {
+  display: grid;
+  grid-template-columns: 180px minmax(260px, 1fr) 140px minmax(180px, 0.55fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.filter-button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.filter-button.active {
+  border-color: var(--accent);
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.filter-spacer {
+  flex: 1 1 auto;
+}
+
+.discover-row {
+  display: grid;
+  grid-template-columns: 24px 72px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 64px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.discover-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.discover-row strong,
+.discover-row span {
+  min-width: 0;
+}
+
+.discover-kind {
+  width: fit-content;
+  min-width: 48px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #ffffff;
+  background: #56616e;
+  text-align: center;
+  font-size: 12px;
 }
 
 .table-wrap {
@@ -484,7 +554,7 @@ td {
   }
 
   .nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .nav-button {
@@ -505,7 +575,8 @@ td {
 
   .metric-grid,
   .settings-grid,
-  .user-row {
+  .user-row,
+  .discover-form {
     grid-template-columns: 1fr;
   }
 

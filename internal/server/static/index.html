@@ -19,6 +19,7 @@
         <nav class="nav" aria-label="主导航">
           <button class="nav-button active" data-view-button="dashboard">总览</button>
           <button class="nav-button" data-view-button="users">用户</button>
+          <button class="nav-button" data-view-button="discover">发现</button>
           <button class="nav-button" data-view-button="settings">配置</button>
           <button class="nav-button" data-view-button="history">历史</button>
           <button class="nav-button" data-view-button="logs">日志</button>
@@ -77,6 +78,38 @@
               </div>
             </div>
             <div class="user-list" id="user-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-discover">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>内容发现</h2>
+              <div class="button-row">
+                <button class="ghost-button" id="discover-button" type="button">获取列表</button>
+                <button class="primary-button" id="download-selected-button" type="button">下载选中</button>
+              </div>
+            </div>
+            <div class="discover-form">
+              <div class="field">
+                <label>来源</label>
+                <select id="discover-user-select"></select>
+              </div>
+              <div class="field wide">
+                <label>主页或内容 URL</label>
+                <input id="discover-url-input" placeholder="抖音用户主页、单条视频、合集或短剧链接" />
+              </div>
+              <div class="field">
+                <label>清晰度</label>
+                <select id="discover-quality-select"></select>
+              </div>
+              <div class="field">
+                <label>保存目录</label>
+                <input id="discover-save-dir-input" placeholder="留空用默认目录" />
+              </div>
+            </div>
+            <div class="filter-row" id="discover-type-filter"></div>
+            <div class="discover-list" id="discover-list"></div>
           </section>
         </section>
 

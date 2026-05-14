@@ -14,6 +14,7 @@ import (
 )
 
 const downloadLinePrefix = "DYDL_DOWNLOAD\t"
+const browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 type Downloader struct{}
 
@@ -89,6 +90,8 @@ func BuildArgs(job Job) ([]string, error) {
 		"--no-overwrites",
 		"--continue",
 		"--no-progress",
+		"--user-agent", browserUserAgent,
+		"--referer", "https://www.douyin.com/",
 		"--merge-output-format", job.MergeOutputFormat,
 		"--print", "after_move:" + downloadLinePrefix + "%(id)s\t%(title)s\t%(filepath)s",
 		"-f", format,

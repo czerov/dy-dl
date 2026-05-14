@@ -20,17 +20,47 @@ const (
 )
 
 var (
-	videoURLPattern  = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/video/(\d{10,})`)
-	videoPathPattern = regexp.MustCompile(`/video/(\d{10,})`)
-	awemeIDPatterns  = []*regexp.Regexp{
+	videoURLPattern       = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/video/(\d{10,})`)
+	videoPathPattern      = regexp.MustCompile(`/video/(\d{10,})`)
+	collectionURLPattern  = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/collection/(\d{10,})`)
+	collectionPathPattern = regexp.MustCompile(`/collection/(\d{10,})`)
+	seriesURLPattern      = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/series/(\d{10,})`)
+	seriesPathPattern     = regexp.MustCompile(`/series/(\d{10,})`)
+	awemeIDPatterns       = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)"(?:aweme_id|awemeId|group_id|item_id|video_id)"\s*:\s*"?(\d{10,})"?`),
 		regexp.MustCompile(`(?i)(?:aweme_id|awemeId|group_id|item_id|video_id)=["']?(\d{10,})["']?`),
 	}
+	collectionIDPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)"(?:mix_id|mixId|collection_id|collectionId)"\s*:\s*"?(\d{10,})"?`),
+		regexp.MustCompile(`(?i)(?:mix_id|mixId|collection_id|collectionId)=["']?(\d{10,})["']?`),
+	}
+	seriesIDPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)"(?:series_id|seriesId|playlet_id|playletId)"\s*:\s*"?(\d{10,})"?`),
+		regexp.MustCompile(`(?i)(?:series_id|seriesId|playlet_id|playletId)=["']?(\d{10,})["']?`),
+	}
+)
+
+const (
+	TypeWork       = "work"
+	TypeCollection = "collection"
+	TypeSeries     = "series"
 )
 
 type Resolver struct {
 	Client    *http.Client
 	UserAgent string
+}
+
+type Result struct {
+	SourceURL string      `json:"source_url"`
+	Items     []MediaItem `json:"items"`
+}
+
+type MediaItem struct {
+	ID    string `json:"id"`
+	Type  string `json:"type"`
+	Title string `json:"title,omitempty"`
+	URL   string `json:"url"`
 }
 
 func NewResolver() *Resolver {
@@ -40,6 +70,56 @@ func NewResolver() *Resolver {
 		},
 		UserAgent: defaultUserAgent,
 	}
+}
+
+func (r *Resolver) Discover(ctx context.Context, sourceURL, cookiesFile string) (Result, error) {
+	normalized := NormalizeSourceURL(sourceURL)
+	if normalized == "" {
+		return Result{}, errors.New("source URL is empty")
+	}
+	if id, ok := DouyinVideoID(normalized); ok {
+		return Result{
+			SourceURL: normalized,
+			Items: []MediaItem{{
+				ID:   id,
+				Type: TypeWork,
+				URL:  videoURL(id),
+			}},
+		}, nil
+	}
+	if id, ok := DouyinCollectionID(normalized); ok {
+		return Result{
+			SourceURL: normalized,
+			Items: []MediaItem{{
+				ID:   id,
+				Type: TypeCollection,
+				URL:  collectionURL(id),
+			}},
+		}, nil
+	}
+	if id, ok := DouyinSeriesID(normalized); ok {
+		return Result{
+			SourceURL: normalized,
+			Items: []MediaItem{{
+				ID:   id,
+				Type: TypeSeries,
+				URL:  seriesURL(id),
+			}},
+		}, nil
+	}
+
+	page, finalURL, err := r.fetchPage(ctx, normalized, cookiesFile)
+	if err != nil {
+		return Result{}, err
+	}
+	items := ExtractMediaItems(page)
+	if len(items) == 0 {
+		return Result{}, errors.New("no works, collections or series found on Douyin page; refresh cookies or try a direct video/collection/series URL")
+	}
+	return Result{
+		SourceURL: finalURL,
+		Items:     items,
+	}, nil
 }
 
 func (r *Resolver) ResolveVideoURLs(ctx context.Context, sourceURL, cookiesFile string) ([]string, error) {
@@ -54,14 +134,34 @@ func (r *Resolver) ResolveVideoURLs(ctx context.Context, sourceURL, cookiesFile 
 		return nil, fmt.Errorf("unsupported URL %q, expected a Douyin user page or video URL", normalized)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, normalized, nil)
+	page, finalURL, err := r.fetchPage(ctx, normalized, cookiesFile)
 	if err != nil {
 		return nil, err
+	}
+	if id, ok := DouyinVideoID(finalURL); ok {
+		return []string{videoURL(id)}, nil
+	}
+	ids := ExtractVideoIDs(page)
+	if len(ids) == 0 {
+		return nil, errors.New("no video IDs found on Douyin page; try a direct https://www.douyin.com/video/<id> URL or refresh cookies")
+	}
+
+	urls := make([]string, 0, len(ids))
+	for _, id := range ids {
+		urls = append(urls, videoURL(id))
+	}
+	return urls, nil
+}
+
+func (r *Resolver) fetchPage(ctx context.Context, sourceURL, cookiesFile string) (string, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
+	if err != nil {
+		return "", "", err
 	}
 	req.Header.Set("User-Agent", r.userAgent())
 	req.Header.Set("Referer", "https://www.douyin.com/")
 	if cookieHeader, err := CookieHeaderFromFile(cookiesFile); err != nil {
-		return nil, err
+		return "", "", err
 	} else if cookieHeader != "" {
 		req.Header.Set("Cookie", cookieHeader)
 	}
@@ -72,32 +172,20 @@ func (r *Resolver) ResolveVideoURLs(ctx context.Context, sourceURL, cookiesFile 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 
 	finalURL := NormalizeSourceURL(resp.Request.URL.String())
-	if id, ok := DouyinVideoID(finalURL); ok {
-		return []string{videoURL(id)}, nil
-	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("fetch Douyin page failed: HTTP %d", resp.StatusCode)
+		return "", "", fmt.Errorf("fetch Douyin page failed: HTTP %d", resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxPageBytes))
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
-	ids := ExtractVideoIDs(string(data))
-	if len(ids) == 0 {
-		return nil, errors.New("no video IDs found on Douyin page; try a direct https://www.douyin.com/video/<id> URL or refresh cookies")
-	}
-
-	urls := make([]string, 0, len(ids))
-	for _, id := range ids {
-		urls = append(urls, videoURL(id))
-	}
-	return urls, nil
+	return string(data), finalURL, nil
 }
 
 func (r *Resolver) userAgent() string {
@@ -115,7 +203,10 @@ func NormalizeSourceURL(raw string) string {
 	}
 	if isDouyinHost(parsed.Hostname()) {
 		parsed.Fragment = ""
-		if strings.HasPrefix(parsed.Path, "/user/") || strings.HasPrefix(parsed.Path, "/video/") {
+		if strings.HasPrefix(parsed.Path, "/user/") ||
+			strings.HasPrefix(parsed.Path, "/video/") ||
+			strings.HasPrefix(parsed.Path, "/collection/") ||
+			strings.HasPrefix(parsed.Path, "/series/") {
 			parsed.RawQuery = ""
 		}
 	}
@@ -131,35 +222,101 @@ func DouyinVideoID(raw string) (string, bool) {
 	return "", false
 }
 
+func DouyinCollectionID(raw string) (string, bool) {
+	value := NormalizeSourceURL(raw)
+	match := collectionURLPattern.FindStringSubmatch(value)
+	if len(match) == 2 {
+		return match[1], true
+	}
+	return "", false
+}
+
+func DouyinSeriesID(raw string) (string, bool) {
+	value := NormalizeSourceURL(raw)
+	match := seriesURLPattern.FindStringSubmatch(value)
+	if len(match) == 2 {
+		return match[1], true
+	}
+	return "", false
+}
+
 func ExtractVideoIDs(page string) []string {
+	items := ExtractMediaItems(page)
 	var ids []string
+	for _, item := range items {
+		if item.Type == TypeWork {
+			ids = append(ids, item.ID)
+		}
+	}
+	return ids
+}
+
+func ExtractMediaItems(page string) []MediaItem {
+	var items []MediaItem
 	seen := map[string]struct{}{}
-	add := func(id string) {
+	add := func(itemType, id string) {
 		if id == "" {
 			return
 		}
-		if _, ok := seen[id]; ok {
+		key := itemType + ":" + id
+		if _, ok := seen[key]; ok {
 			return
 		}
-		seen[id] = struct{}{}
-		ids = append(ids, id)
+		seen[key] = struct{}{}
+		item := MediaItem{
+			ID:   id,
+			Type: itemType,
+		}
+		switch itemType {
+		case TypeWork:
+			item.URL = videoURL(id)
+		case TypeCollection:
+			item.URL = collectionURL(id)
+		case TypeSeries:
+			item.URL = seriesURL(id)
+		}
+		items = append(items, item)
 	}
 
 	for _, candidate := range pageVariants(page) {
 		for _, match := range videoPathPattern.FindAllStringSubmatch(candidate, -1) {
 			if len(match) == 2 {
-				add(match[1])
+				add(TypeWork, match[1])
+			}
+		}
+		for _, match := range collectionPathPattern.FindAllStringSubmatch(candidate, -1) {
+			if len(match) == 2 {
+				add(TypeCollection, match[1])
+			}
+		}
+		for _, match := range seriesPathPattern.FindAllStringSubmatch(candidate, -1) {
+			if len(match) == 2 {
+				add(TypeSeries, match[1])
 			}
 		}
 		for _, pattern := range awemeIDPatterns {
 			for _, match := range pattern.FindAllStringSubmatch(candidate, -1) {
 				if len(match) == 2 {
-					add(match[1])
+					add(TypeWork, match[1])
+				}
+			}
+		}
+		for _, pattern := range collectionIDPatterns {
+			for _, match := range pattern.FindAllStringSubmatch(candidate, -1) {
+				if len(match) == 2 {
+					add(TypeCollection, match[1])
+				}
+			}
+		}
+		for _, pattern := range seriesIDPatterns {
+			for _, match := range pattern.FindAllStringSubmatch(candidate, -1) {
+				if len(match) == 2 {
+					add(TypeSeries, match[1])
 				}
 			}
 		}
 	}
-	return ids
+	return items
 }
 
 func CookieHeaderFromFile(path string) (string, error) {
@@ -234,4 +391,12 @@ func isDouyinHost(host string) bool {
 
 func videoURL(id string) string {
 	return "https://www.douyin.com/video/" + id
+}
+
+func collectionURL(id string) string {
+	return "https://www.douyin.com/collection/" + id
+}
+
+func seriesURL(id string) string {
+	return "https://www.douyin.com/series/" + id
 }
