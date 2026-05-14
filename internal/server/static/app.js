@@ -610,13 +610,60 @@ function buildCollectorScript() {
     lastHeight = height;
   }
   const output = JSON.stringify({ source_url: location.href, items: [...bag.values()] }, null, 2);
-  if (typeof copy === "function") {
-    copy(output);
-  } else if (navigator.clipboard && window.isSecureContext) {
-    await navigator.clipboard.writeText(output);
-  } else {
+  const showOutput = (text, copied) => {
+    let panel = document.getElementById("__dydl_collector_panel__");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "__dydl_collector_panel__";
+      Object.assign(panel.style, {
+        position: "fixed",
+        top: "16px",
+        right: "16px",
+        zIndex: "2147483647",
+        width: "520px",
+        maxWidth: "calc(100vw - 32px)",
+        padding: "12px",
+        borderRadius: "8px",
+        background: "#111827",
+        color: "#fff",
+        boxShadow: "0 16px 36px rgba(0,0,0,.35)",
+        fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif",
+      });
+      panel.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">' +
+        '<strong style="font-size:14px">douyin-nas-monitor 采集结果</strong>' +
+        '<button type="button" style="border:0;border-radius:6px;padding:6px 10px;cursor:pointer">关闭</button>' +
+        '</div>' +
+        '<div data-dydl-state style="font-size:12px;color:#cbd5e1;margin-bottom:8px"></div>' +
+        '<textarea spellcheck="false" style="width:100%;height:280px;box-sizing:border-box;border:1px solid #475569;border-radius:6px;padding:8px;background:#020617;color:#e5e7eb;font:12px/1.45 Consolas, monospace"></textarea>';
+      panel.querySelector("button").addEventListener("click", () => panel.remove());
+      document.body.appendChild(panel);
+    }
+    panel.querySelector("[data-dydl-state]").textContent = copied
+      ? "已复制到剪贴板，也可从下面手动复制。"
+      : "浏览器拒绝自动复制，请从下面手动复制后粘贴到管理台。";
+    const textarea = panel.querySelector("textarea");
+    textarea.value = text;
+    textarea.focus();
+    textarea.select();
+  };
+  let copied = false;
+  try {
+    if (typeof copy === "function") {
+      await Promise.resolve(copy(output));
+      copied = true;
+    } else if (navigator.clipboard && window.isSecureContext && document.hasFocus()) {
+      await navigator.clipboard.writeText(output);
+      copied = true;
+    }
+  } catch (error) {
+    console.warn("douyin-nas-monitor copy failed, use the result panel instead.", error);
+  }
+  window.__DYDL_DISCOVERY_RESULT__ = output;
+  if (!copied) {
     console.log(output);
   }
+  showOutput(output, copied);
   console.log("douyin-nas-monitor collected " + bag.size + " item(s)");
   return [...bag.values()];
 })();`;
