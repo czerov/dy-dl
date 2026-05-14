@@ -55,6 +55,10 @@ function bindActions() {
   document.getElementById("save-settings-button").addEventListener("click", saveConfig);
   document.getElementById("save-cookie-button").addEventListener("click", saveCookies);
   document.getElementById("discover-button").addEventListener("click", discoverContent);
+  document.getElementById("collector-bookmarklet").addEventListener("click", (event) => {
+    event.preventDefault();
+    showToast("把“采集书签”拖到书签栏后在抖音页面点击");
+  });
   document.getElementById("copy-collector-button").addEventListener("click", copyCollectorScript);
   document.getElementById("import-discovery-button").addEventListener("click", importDiscoveryContent);
   document.getElementById("download-selected-button").addEventListener("click", downloadSelectedDiscovery);
@@ -407,6 +411,10 @@ function renderDiscoveryCollector() {
   if (script) {
     script.value = buildCollectorScript();
   }
+  const bookmarklet = document.getElementById("collector-bookmarklet");
+  if (bookmarklet) {
+    bookmarklet.href = buildCollectorBookmarklet();
+  }
 }
 
 function renderDiscoveryFilters() {
@@ -667,6 +675,10 @@ function buildCollectorScript() {
   console.log("douyin-nas-monitor collected " + bag.size + " item(s)");
   return [...bag.values()];
 })();`;
+}
+
+function buildCollectorBookmarklet() {
+  return `javascript:${encodeURIComponent(buildCollectorScript())}`;
 }
 
 function renderSettings() {

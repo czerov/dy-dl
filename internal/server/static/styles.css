@@ -153,10 +153,14 @@ h2 {
 .primary-button,
 .ghost-button,
 .danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 38px;
   border-radius: 8px;
   padding: 0 14px;
   border: 1px solid transparent;
+  text-decoration: none;
 }
 
 .primary-button {
