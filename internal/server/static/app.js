@@ -55,6 +55,8 @@ function bindActions() {
   document.getElementById("save-settings-button").addEventListener("click", saveConfig);
   document.getElementById("save-cookie-button").addEventListener("click", saveCookies);
   document.getElementById("discover-button").addEventListener("click", discoverContent);
+  document.getElementById("copy-collector-button").addEventListener("click", copyCollectorScript);
+  document.getElementById("import-discovery-button").addEventListener("click", importDiscoveryContent);
   document.getElementById("download-selected-button").addEventListener("click", downloadSelectedDiscovery);
   document.getElementById("discover-user-select").addEventListener("change", applyDiscoverUser);
   document.getElementById("refresh-history-button").addEventListener("click", loadDownloads);
@@ -291,6 +293,47 @@ async function discoverContent() {
   }
 }
 
+async function copyCollectorScript() {
+  const script = buildCollectorScript();
+  const output = document.getElementById("collector-script");
+  output.value = script;
+  try {
+    await copyText(script, output);
+    showToast("采集脚本已复制");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function importDiscoveryContent() {
+  const input = document.getElementById("discover-import-input");
+  const content = input.value.trim();
+  if (!content) {
+    showToast("采集结果为空");
+    return;
+  }
+
+  try {
+    const result = await api("/api/discover/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: document.getElementById("discover-url-input").value.trim(),
+        content,
+      }),
+    });
+    state.discovery.result = mergeDiscoveryResults(state.discovery.result, result);
+    state.discovery.selected = new Set();
+    state.discovery.filter = "all";
+    state.discovery.sourceName = currentDiscoverUserName() || "selected";
+    input.value = "";
+    renderDiscovery();
+    showToast(`已导入 ${result.items.length} 个内容`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 async function downloadSelectedDiscovery() {
   const result = state.discovery.result;
   if (!result || !result.items || !result.items.length) {
@@ -302,7 +345,8 @@ async function downloadSelectedDiscovery() {
     .map((index) => result.items[Number(index)])
     .filter(Boolean)
     .map((item) => item.url);
-  if (!urls.length) {
+  const uniqueURLs = [...new Set(urls)];
+  if (!uniqueURLs.length) {
     showToast("先勾选要下载的内容");
     return;
   }
@@ -315,7 +359,7 @@ async function downloadSelectedDiscovery() {
         user_name: state.discovery.sourceName || currentDiscoverUserName() || "selected",
         quality: document.getElementById("discover-quality-select").value,
         save_dir: document.getElementById("discover-save-dir-input").value.trim(),
-        urls,
+        urls: uniqueURLs,
       }),
     });
     showToast("选中内容已开始下载");
@@ -328,6 +372,7 @@ async function downloadSelectedDiscovery() {
 
 function renderDiscovery() {
   renderDiscoveryForm();
+  renderDiscoveryCollector();
   renderDiscoveryFilters();
   renderDiscoveryItems();
 }
@@ -355,6 +400,13 @@ function renderDiscoveryForm() {
     .map((option) => `<option value="${option}">${option}</option>`)
     .join("");
   qualitySelectElement.value = qualityOptions.includes(previousQuality) ? previousQuality : "1080";
+}
+
+function renderDiscoveryCollector() {
+  const script = document.getElementById("collector-script");
+  if (script) {
+    script.value = buildCollectorScript();
+  }
 }
 
 function renderDiscoveryFilters() {
@@ -464,6 +516,110 @@ function selectedDiscoverUser() {
 function currentDiscoverUserName() {
   const user = selectedDiscoverUser();
   return user && user.name ? user.name : "";
+}
+
+function mergeDiscoveryResults(current, next) {
+  const items = current && Array.isArray(current.items) ? current.items.slice() : [];
+  const seen = new Map();
+  items.forEach((item, index) => {
+    seen.set(discoveryItemKey(item), index);
+  });
+
+  ((next && next.items) || []).forEach((item) => {
+    const key = discoveryItemKey(item);
+    if (!key) return;
+    if (seen.has(key)) {
+      const existing = items[seen.get(key)];
+      if (!existing.title && item.title) existing.title = item.title;
+      if (!existing.url && item.url) existing.url = item.url;
+      return;
+    }
+    seen.set(key, items.length);
+    items.push(item);
+  });
+
+  return {
+    source_url: (next && next.source_url) || (current && current.source_url) || "",
+    items,
+  };
+}
+
+function discoveryItemKey(item) {
+  if (!item) return "";
+  return `${item.type || "unknown"}:${item.id || item.url || ""}`;
+}
+
+function buildCollectorScript() {
+  return String.raw`(async () => {
+  const bag = new Map();
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const cleanTitle = (value) => String(value || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const normalizeURL = (href) => {
+    try {
+      const url = new URL(href, location.origin);
+      url.hash = "";
+      return url.href;
+    } catch {
+      return "";
+    }
+  };
+  const inferType = (url) => {
+    try {
+      const path = new URL(url).pathname;
+      if (/\/video\/\d{10,}/.test(path)) return "work";
+      if (/\/(?:collection|mix\/detail)\/\d{10,}/.test(path)) return "collection";
+      if (/\/(?:series|playlet)\/\d{10,}/.test(path)) return "series";
+    } catch {}
+    return "";
+  };
+  const add = (href, title = "") => {
+    const url = normalizeURL(href);
+    const type = inferType(url);
+    if (!type) return;
+    const match = url.match(/\/(?:video|collection|series|playlet)\/(\d{10,})|\/mix\/detail\/(\d{10,})/);
+    const id = match && (match[1] || match[2]);
+    if (!id) return;
+    const key = type + ":" + id;
+    const current = bag.get(key);
+    if (!current || (!current.title && title)) {
+      bag.set(key, { type, id, title: cleanTitle(title), url });
+    }
+  };
+  const collect = () => {
+    document.querySelectorAll("a[href]").forEach((node) => {
+      add(node.getAttribute("href"), node.innerText || node.title || node.getAttribute("aria-label") || "");
+    });
+    const html = document.documentElement.innerHTML.replaceAll("\\u002F", "/").replaceAll("\\/", "/");
+    [
+      [/\/video\/(\d{10,})/g, "https://www.douyin.com/video/"],
+      [/\/(?:collection|mix\/detail)\/(\d{10,})/g, "https://www.douyin.com/collection/"],
+      [/\/(?:series|playlet)\/(\d{10,})/g, "https://www.douyin.com/series/"],
+    ].forEach(([pattern, prefix]) => {
+      for (const match of html.matchAll(pattern)) add(prefix + match[1]);
+    });
+  };
+  collect();
+  let lastHeight = 0;
+  let stable = 0;
+  for (let step = 0; step < 24 && stable < 3; step += 1) {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await wait(650);
+    collect();
+    const height = document.documentElement.scrollHeight;
+    stable = height === lastHeight ? stable + 1 : 0;
+    lastHeight = height;
+  }
+  const output = JSON.stringify({ source_url: location.href, items: [...bag.values()] }, null, 2);
+  if (typeof copy === "function") {
+    copy(output);
+  } else if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(output);
+  } else {
+    console.log(output);
+  }
+  console.log("douyin-nas-monitor collected " + bag.size + " item(s)");
+  return [...bag.values()];
+})();`;
 }
 
 function renderSettings() {
@@ -639,6 +795,18 @@ function showToast(message) {
   toast.classList.add("show");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 3200);
+}
+
+async function copyText(text, fallbackElement) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  fallbackElement.focus();
+  fallbackElement.select();
+  if (!document.execCommand("copy")) {
+    throw new Error("复制失败，请手动复制");
+  }
 }
 
 function escapeHTML(value) {

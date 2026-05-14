@@ -31,7 +31,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -327,7 +328,8 @@ h2 {
 
 .field input,
 .field select,
-.cookie-input {
+.cookie-input,
+.collector-input {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -348,6 +350,42 @@ h2 {
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.collector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.collector-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.collector-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.collector-input {
+  min-height: 132px;
+  resize: vertical;
+  padding: 12px;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.collector-input[readonly] {
+  color: #39424e;
+  background: #f8fafb;
 }
 
 .field input[type="checkbox"] {
@@ -587,5 +625,14 @@ td {
   .panel-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .collector-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .collector-grid {
+    grid-template-columns: 1fr;
   }
 }

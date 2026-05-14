@@ -89,7 +89,7 @@ docker compose run --rm douyin-monitor
 
 添加用户时，`URL` 填抖音用户主页链接，例如 `https://www.douyin.com/user/MS4wLj...`，不要只填抖音号。也可以填单条视频链接 `https://www.douyin.com/video/数字ID` 用来测试 Cookie 和下载链路。
 
-“发现”页面可以用当前 CK 获取某个主页里的作品、合集和短剧入口，勾选后再下载。合集和短剧会先展开成其中的视频，再按所选清晰度下载。
+“发现”页面可以用当前 CK 尝试获取某个主页里的作品、合集和短剧入口，勾选后再下载。抖音 PC 页面经常把真实列表放在浏览器渲染后的动态数据里，这时用“浏览器采集”复制脚本，到已登录的抖音作品/合集/短剧页控制台运行，再把采集结果粘贴回管理台导入选择。
 
 如果只想用 NAS 定时任务单次执行，把 compose 中的 command 和 restart 改成：
 
@@ -112,6 +112,9 @@ restart: "no"
 | POST | `/api/run` | 手动启动一次下载 |
 | GET | `/api/check` | 环境检查 |
 | GET | `/api/downloads` | 下载历史 |
+| POST | `/api/discover` | 尝试从 URL 获取内容列表 |
+| POST | `/api/discover/import` | 导入浏览器采集结果或链接列表 |
+| POST | `/api/discover/download` | 下载发现页选中的内容 |
 | GET | `/api/logs` | 日志尾部 |
 
 ## NAS 定时任务

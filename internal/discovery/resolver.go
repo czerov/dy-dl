@@ -1,7 +1,9 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -10,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,10 +25,10 @@ const (
 var (
 	videoURLPattern       = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/video/(\d{10,})`)
 	videoPathPattern      = regexp.MustCompile(`/video/(\d{10,})`)
-	collectionURLPattern  = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/collection/(\d{10,})`)
-	collectionPathPattern = regexp.MustCompile(`/collection/(\d{10,})`)
-	seriesURLPattern      = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/series/(\d{10,})`)
-	seriesPathPattern     = regexp.MustCompile(`/series/(\d{10,})`)
+	collectionURLPattern  = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/(?:collection|mix/detail)/(\d{10,})`)
+	collectionPathPattern = regexp.MustCompile(`/(?:collection|mix/detail)/(\d{10,})`)
+	seriesURLPattern      = regexp.MustCompile(`https?://(?:www\.)?douyin\.com/(?:series|playlet)/(\d{10,})`)
+	seriesPathPattern     = regexp.MustCompile(`/(?:series|playlet)/(\d{10,})`)
 	awemeIDPatterns       = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)"(?:aweme_id|awemeId|group_id|item_id|video_id)"\s*:\s*"?(\d{10,})"?`),
 		regexp.MustCompile(`(?i)(?:aweme_id|awemeId|group_id|item_id|video_id)=["']?(\d{10,})["']?`),
@@ -130,6 +133,27 @@ func (r *Resolver) Discover(ctx context.Context, sourceURL, cookiesFile string) 
 	}
 	return Result{
 		SourceURL: finalURL,
+		Items:     items,
+	}, nil
+}
+
+func ImportMediaItems(sourceURL, content string) (Result, error) {
+	sourceURL = NormalizeSourceURL(sourceURL)
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return Result{}, errors.New("import content is empty")
+	}
+
+	items := parseImportedJSONMediaItems(content)
+	if len(items) == 0 {
+		items = ExtractMediaItems(content)
+	}
+	items = mergeMediaItems(nil, items)
+	if len(items) == 0 {
+		return Result{}, errors.New("no Douyin works, collections or series found in imported content")
+	}
+	return Result{
+		SourceURL: sourceURL,
 		Items:     items,
 	}, nil
 }
@@ -363,19 +387,171 @@ func mergeMediaItems(base, next []MediaItem) []MediaItem {
 	if len(base) == 0 {
 		base = []MediaItem{}
 	}
-	seen := make(map[string]struct{}, len(base)+len(next))
-	for _, item := range base {
-		seen[item.Type+":"+item.ID] = struct{}{}
+	seen := make(map[string]int, len(base)+len(next))
+	for index, item := range base {
+		seen[item.Type+":"+item.ID] = index
 	}
 	for _, item := range next {
 		key := item.Type + ":" + item.ID
-		if _, ok := seen[key]; ok {
+		if index, ok := seen[key]; ok {
+			if base[index].Title == "" && item.Title != "" {
+				base[index].Title = item.Title
+			}
+			if base[index].URL == "" && item.URL != "" {
+				base[index].URL = item.URL
+			}
 			continue
 		}
-		seen[key] = struct{}{}
+		seen[key] = len(base)
 		base = append(base, item)
 	}
 	return base
+}
+
+func parseImportedJSONMediaItems(content string) []MediaItem {
+	decoder := json.NewDecoder(bytes.NewReader([]byte(content)))
+	decoder.UseNumber()
+	var payload any
+	if err := decoder.Decode(&payload); err != nil {
+		return nil
+	}
+	var items []MediaItem
+	collectImportedJSONMediaItems(payload, &items)
+	return items
+}
+
+func collectImportedJSONMediaItems(value any, items *[]MediaItem) {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			collectImportedJSONMediaItems(item, items)
+		}
+	case map[string]any:
+		if item, ok := mediaItemFromImportMap(typed); ok {
+			*items = append(*items, item)
+			return
+		}
+		for _, key := range []string{"items", "data", "list", "aweme_list", "awemeList", "videos"} {
+			if nested, ok := typed[key]; ok {
+				collectImportedJSONMediaItems(nested, items)
+			}
+		}
+	}
+}
+
+func mediaItemFromImportMap(data map[string]any) (MediaItem, bool) {
+	rawURL := normalizeImportedURL(firstImportString(data, "url", "href", "link", "share_url", "shareUrl"))
+	title := firstImportString(data, "title", "desc", "description", "name", "text")
+	if rawURL != "" {
+		if id, ok := DouyinVideoID(rawURL); ok {
+			return MediaItem{ID: id, Type: TypeWork, Title: title, URL: videoURL(id)}, true
+		}
+		if id, ok := DouyinCollectionID(rawURL); ok {
+			return MediaItem{ID: id, Type: TypeCollection, Title: title, URL: collectionURL(id)}, true
+		}
+		if id, ok := DouyinSeriesID(rawURL); ok {
+			return MediaItem{ID: id, Type: TypeSeries, Title: title, URL: seriesURL(id)}, true
+		}
+	}
+
+	itemType := normalizeImportedType(firstImportString(data, "type", "kind", "category", "tab"))
+	id := firstImportString(
+		data,
+		"id",
+		"aweme_id",
+		"awemeId",
+		"group_id",
+		"item_id",
+		"video_id",
+		"mix_id",
+		"mixId",
+		"collection_id",
+		"collectionId",
+		"series_id",
+		"seriesId",
+		"playlet_id",
+		"playletId",
+	)
+	if itemType == "" || !looksLikeDouyinID(id) {
+		return MediaItem{}, false
+	}
+
+	item := MediaItem{
+		ID:    id,
+		Type:  itemType,
+		Title: title,
+	}
+	switch itemType {
+	case TypeWork:
+		item.URL = videoURL(id)
+	case TypeCollection:
+		item.URL = collectionURL(id)
+	case TypeSeries:
+		item.URL = seriesURL(id)
+	default:
+		return MediaItem{}, false
+	}
+	return item, true
+}
+
+func firstImportString(data map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := data[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case string:
+			if text := strings.TrimSpace(typed); text != "" {
+				return text
+			}
+		case json.Number:
+			if text := strings.TrimSpace(typed.String()); text != "" {
+				return text
+			}
+		case float64:
+			if typed > 0 {
+				return strconv.FormatInt(int64(typed), 10)
+			}
+		}
+	}
+	return ""
+}
+
+func normalizeImportedType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case TypeWork, "video", "aweme", "post", "作品":
+		return TypeWork
+	case TypeCollection, "mix", "合集":
+		return TypeCollection
+	case TypeSeries, "playlet", "short_drama", "shortdrama", "drama", "短剧":
+		return TypeSeries
+	default:
+		return ""
+	}
+}
+
+func normalizeImportedURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	if strings.HasPrefix(value, "//") {
+		return NormalizeSourceURL("https:" + value)
+	}
+	if strings.HasPrefix(value, "/") {
+		return NormalizeSourceURL("https://www.douyin.com" + value)
+	}
+	return NormalizeSourceURL(value)
+}
+
+func looksLikeDouyinID(value string) bool {
+	if len(value) < 10 {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func CookieHeaderFromFile(path string) (string, error) {

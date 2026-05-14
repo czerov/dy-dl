@@ -108,6 +108,23 @@
                 <input id="discover-save-dir-input" placeholder="留空用默认目录" />
               </div>
             </div>
+            <div class="collector-header">
+              <h3>浏览器采集</h3>
+              <div class="button-row">
+                <button class="ghost-button" id="copy-collector-button" type="button">复制脚本</button>
+                <button class="ghost-button" id="import-discovery-button" type="button">导入结果</button>
+              </div>
+            </div>
+            <div class="collector-grid">
+              <div class="field">
+                <label>采集脚本</label>
+                <textarea class="collector-input" id="collector-script" readonly spellcheck="false"></textarea>
+              </div>
+              <div class="field">
+                <label>采集结果</label>
+                <textarea class="collector-input" id="discover-import-input" spellcheck="false" placeholder="粘贴 JSON、链接或页面 HTML"></textarea>
+              </div>
+            </div>
             <div class="filter-row" id="discover-type-filter"></div>
             <div class="discover-list" id="discover-list"></div>
           </section>

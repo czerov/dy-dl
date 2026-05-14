@@ -67,6 +67,11 @@ type discoverRequest struct {
 	URL string `json:"url"`
 }
 
+type discoverImportRequest struct {
+	URL     string `json:"url"`
+	Content string `json:"content"`
+}
+
 type discoverDownloadRequest struct {
 	UserName string   `json:"user_name"`
 	Quality  string   `json:"quality"`
@@ -137,6 +142,7 @@ func (s *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("/api/check", s.handleCheck)
 	mux.HandleFunc("/api/downloads", s.handleDownloads)
 	mux.HandleFunc("/api/discover", s.handleDiscover)
+	mux.HandleFunc("/api/discover/import", s.handleDiscoverImport)
 	mux.HandleFunc("/api/discover/download", s.handleDiscoverDownload)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.Handle("/", spaHandler(staticFS))
@@ -307,6 +313,24 @@ func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
 
 	cfg, _, _, _, _ := s.snapshot()
 	result, err := discovery.NewResolver().Discover(r.Context(), sourceURL, cfg.App.CookiesFile)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleDiscoverImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+	var req discoverImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	result, err := discovery.ImportMediaItems(req.URL, req.Content)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
