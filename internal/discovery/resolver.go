@@ -108,11 +108,23 @@ func (r *Resolver) Discover(ctx context.Context, sourceURL, cookiesFile string) 
 		}, nil
 	}
 
-	page, finalURL, err := r.fetchPage(ctx, normalized, cookiesFile)
-	if err != nil {
-		return Result{}, err
+	var items []MediaItem
+	var finalURL string
+	var lastErr error
+	for _, candidateURL := range discoveryCandidateURLs(normalized) {
+		page, fetchedURL, err := r.fetchPage(ctx, candidateURL, cookiesFile)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if finalURL == "" {
+			finalURL = fetchedURL
+		}
+		items = mergeMediaItems(items, ExtractMediaItems(page))
 	}
-	items := ExtractMediaItems(page)
+	if len(items) == 0 && lastErr != nil {
+		return Result{}, lastErr
+	}
 	if len(items) == 0 {
 		return Result{}, errors.New("no works, collections or series found on Douyin page; refresh cookies or try a direct video/collection/series URL")
 	}
@@ -211,6 +223,34 @@ func NormalizeSourceURL(raw string) string {
 		}
 	}
 	return parsed.String()
+}
+
+func discoveryCandidateURLs(raw string) []string {
+	normalized := NormalizeSourceURL(raw)
+	parsed, err := url.Parse(normalized)
+	if err != nil || !isDouyinHost(parsed.Hostname()) || !strings.HasPrefix(parsed.Path, "/user/") {
+		return []string{normalized}
+	}
+
+	base := *parsed
+	base.RawQuery = ""
+	base.Fragment = ""
+	candidates := []string{base.String()}
+	for _, tab := range []string{
+		"post",
+		"collection",
+		"series",
+		"playlet",
+		"short_drama",
+		"shortDrama",
+	} {
+		next := base
+		query := next.Query()
+		query.Set("showTab", tab)
+		next.RawQuery = query.Encode()
+		candidates = append(candidates, next.String())
+	}
+	return candidates
 }
 
 func DouyinVideoID(raw string) (string, bool) {
@@ -317,6 +357,25 @@ func ExtractMediaItems(page string) []MediaItem {
 		}
 	}
 	return items
+}
+
+func mergeMediaItems(base, next []MediaItem) []MediaItem {
+	if len(base) == 0 {
+		base = []MediaItem{}
+	}
+	seen := make(map[string]struct{}, len(base)+len(next))
+	for _, item := range base {
+		seen[item.Type+":"+item.ID] = struct{}{}
+	}
+	for _, item := range next {
+		key := item.Type + ":" + item.ID
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		base = append(base, item)
+	}
+	return base
 }
 
 func CookieHeaderFromFile(path string) (string, error) {

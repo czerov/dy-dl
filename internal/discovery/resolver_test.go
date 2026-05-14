@@ -50,6 +50,19 @@ func TestExtractMediaItems(t *testing.T) {
 	}
 }
 
+func TestDiscoveryCandidateURLs(t *testing.T) {
+	got := discoveryCandidateURLs("https://www.douyin.com/user/MS4wLjABAAAA123?from_tab_name=main")
+	if len(got) < 4 {
+		t.Fatalf("expected multiple tab candidates, got %#v", got)
+	}
+	if got[0] != "https://www.douyin.com/user/MS4wLjABAAAA123" {
+		t.Fatalf("first candidate = %q", got[0])
+	}
+	if got[2] != "https://www.douyin.com/user/MS4wLjABAAAA123?showTab=collection" {
+		t.Fatalf("collection candidate = %q", got[2])
+	}
+}
+
 func TestCookieHeaderFromFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cookies.txt")
 	content := "# Netscape HTTP Cookie File\n.douyin.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\tabc\n.douyin.com\tTRUE\t/\tTRUE\t2147483647\tttwid\tdef\n"
