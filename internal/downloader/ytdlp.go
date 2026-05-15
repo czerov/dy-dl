@@ -67,6 +67,10 @@ func (d *Downloader) Run(ctx context.Context, job Job) (Result, error) {
 		return result, ctx.Err()
 	}
 	if err != nil {
+		if directResult, directErr := RunDouyinDirectFallback(ctx, job); directErr == nil {
+			directResult.Output = strings.TrimSpace(output + "\n" + directResult.Output)
+			return directResult, nil
+		}
 		return result, fmt.Errorf("yt-dlp failed: %w: %s", err, tail(output, 3000))
 	}
 	return result, nil
